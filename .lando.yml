@@ -1,0 +1,17 @@
+version: "3"
+name: "discord role bot"
+
+services:
+  bot:
+    type: node:14
+
+tooling:
+  yarn:
+    service: bot
+  npm:
+    service: bot
+  node:
+    service: bot
+  tsc:
+    cmd: npx tsc -w .
+    service: bot
