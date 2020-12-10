@@ -10,6 +10,8 @@ tooling:
     service: bot
   npm:
     service: bot
+  npx:
+    service: bot
   node:
     service: bot
   tsc:
