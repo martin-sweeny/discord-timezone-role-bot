@@ -16,7 +16,12 @@ client.once('ready', () => {
 	console.log(`${timezones.length} timezones loaded`)
 })
 
-client.on('message', (msg: Message) => {
+client.on('message', async (msg: Message) => {
+	const resetBotState = () => {
+		msg.channel.send('too long loser')
+		botState = BotStates.Bored
+	}
+
 	if (msg.author.bot) return
 
 	if (botState === BotStates.Bored && msg.content === 'sup t') {
@@ -26,27 +31,44 @@ client.on('message', (msg: Message) => {
 	}
 
 	if (botState === BotStates.WaitingForTimezoneResponse) {
-		if (timezones.find(tz => tz.abbr === msg.content)) {
+		const t = setTimeout(resetBotState, 10000)
+
+		const tz = await timezones.find(tz => tz.abbr === msg.content)
+		let role
+
+		if (tz) {
 			msg.channel.send(msg.content + ' is based')
 
-			const role = msg.guild.roles.cache.find(
+			role = await msg.guild.roles.cache.find(
 				({ name }) => name === msg.content,
 			)
 			if (role) {
 				msg.channel.send('that role exists')
-
-				if (msg.member.roles.cache.find(({ name }) => name === msg.content)) {
-					msg.channel.send('user has it')
-				} else {
-					msg.member.roles.add(role)
-					msg.channel.send(`${msg.content} role added`)
-				}
 			} else {
 				msg.channel.send('that role does not exist')
+				msg.channel.send("let's make it")
+
+				role = await msg.guild.roles.create({
+					data: {
+						name: msg.content,
+						color: 'BLUE',
+					},
+				})
+			}
+
+			const memberRole = await msg.member.roles.cache.find(
+				({ name }) => name === msg.content,
+			)
+
+			if (memberRole) {
+				msg.channel.send('user has it')
+				clearTimeout(t)
+			} else {
+				msg.member.roles.add(role)
+				msg.channel.send(`${msg.content} role added`)
+				clearTimeout(t)
 			}
 		}
-
-		setTimeout(() => (botState = BotStates.Bored), 5000)
 	}
 })
 
