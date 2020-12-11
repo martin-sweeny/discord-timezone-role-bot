@@ -29,9 +29,21 @@ client.on('message', (msg: Message) => {
 		if (timezones.find(tz => tz.abbr === msg.content)) {
 			msg.channel.send(msg.content + ' is based')
 
-			if (msg.guild.roles.cache.find((role: Role) => role.name === msg.content))
+			const role = msg.guild.roles.cache.find(
+				({ name }) => name === msg.content,
+			)
+			if (role) {
 				msg.channel.send('that role exists')
-			else msg.channel.send('that role does not exist')
+
+				if (msg.member.roles.cache.find(({ name }) => name === msg.content)) {
+					msg.channel.send('user has it')
+				} else {
+					msg.member.roles.add(role)
+					msg.channel.send(`${msg.content} role added`)
+				}
+			} else {
+				msg.channel.send('that role does not exist')
+			}
 		}
 
 		setTimeout(() => (botState = BotStates.Bored), 5000)
