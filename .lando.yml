@@ -1,19 +1,16 @@
-version: "3"
-name: "discord role bot"
+version: '3'
+name: 'discord role bot'
 
 services:
-  bot:
+  botserver:
     type: node:14
 
 tooling:
   yarn:
-    service: bot
+    service: botserver
   npm:
-    service: bot
+    service: botserver
   npx:
-    service: bot
+    service: botserver
   node:
-    service: bot
-  tsc:
-    cmd: npx tsc -w .
-    service: bot
+    service: botserver
