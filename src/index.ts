@@ -1,54 +1,123 @@
-import timezones from './data/timezones.json'
+import { Client, Message, Role } from 'discord.js'
+
 import { config as configureEnvironment } from 'dotenv'
-import { Client, Guild, Message, Role, RoleManager } from 'discord.js'
+import timezones from './data/timezones.json'
 
 configureEnvironment()
 const client = new Client()
 
 enum BotStates {
 	Bored,
-	WaitingForTimezoneResponse,
+	Waiting,
 }
 
-let botState = BotStates.Bored
+const log = (...message) => {
+	if (process.env.DEBUG) console.log(...message)
+}
+
+class BotStateManager {
+	public _state
+	private _defaultState = BotStates.Bored
+
+	constructor() {
+		this.state = this._defaultState
+	}
+
+	public get state() {
+		return this._state
+	}
+
+	public set state(newState: BotStates) {
+		log('Setting bot state to:\t', newState)
+		this._state = newState
+	}
+
+	public resetState() {
+		log('Clean state reset')
+		this.state = this._defaultState
+	}
+
+	public isDefaultState() {
+		return this._state === this._defaultState
+	}
+
+	public isWaiting() {
+		return this._state === BotStates.Waiting
+	}
+}
+
+type Timezone = typeof timezones[0]
+
+let botState = new BotStateManager()
+let timeout: NodeJS.Timeout
 
 client.once('ready', () => {
-	console.log(`${timezones.length} timezones loaded`)
+	log(`${timezones.length} timezones loaded`)
 })
 
 client.on('message', async (msg: Message) => {
-	const resetBotState = () => {
-		msg.channel.send('too long loser')
-		botState = BotStates.Bored
+	const { author, channel, guild } = msg
+
+	const speak = async (message: string) => {
+		log('msg.channel.send:\t' + message)
+		await channel.send(message)
 	}
 
-	if (msg.author.bot) return
-
-	if (botState === BotStates.Bored && msg.content === 'sup t') {
-		msg.channel.send('sup fam')
-		msg.channel.send('what timezone are you in')
-		botState = BotStates.WaitingForTimezoneResponse
+	/**
+	 * Time out if the user took too long
+	 */
+	const tookTooLong = async () => {
+		speak('too long loser')
+		log('Time out state reset')
+		botState.state = BotStates.Bored
 	}
 
-	if (botState === BotStates.WaitingForTimezoneResponse) {
-		const t = setTimeout(resetBotState, 10000)
+	/**
+	 * Create the timer
+	 */
+	const setWaitingTimer = () => {
+		log('Setting timeout')
+		const t = client.setTimeout(tookTooLong, 10000)
+		log('Set timeout:\t\t' + t)
+		return t
+	}
 
-		const tz = await timezones.find(tz => tz.abbr === msg.content)
-		let role
+	/**
+	 * Clear the timer
+	 */
+	const clearWaitingTimer = (t: NodeJS.Timeout) => {
+		log('Clearing timeout:\t' + t)
+		client.clearTimeout(t)
+	}
+
+	// Bots send kind of "hidden" messages that we want to ignore
+	if (author.bot) return
+
+	log('Received message:\t' + msg.content)
+
+	if (botState.isDefaultState() && msg.content === 'sup t') {
+		speak('sup fam')
+		speak('what timezone are you in')
+		timeout = setWaitingTimer()
+		botState.state = BotStates.Waiting
+	}
+
+	const tz: Timezone = timezones.find(tz => tz.abbr === msg.content)
+	if (botState.isWaiting()) {
+		let role: Role
 
 		if (tz) {
-			msg.channel.send(msg.content + ' is based')
+			speak(msg.content + ' is based')
 
-			role = await msg.guild.roles.cache.find(
-				({ name }) => name === msg.content,
-			)
+			role = await guild.roles.cache.find(({ name }) => name === msg.content)
+
 			if (role) {
-				msg.channel.send('that role exists')
+				speak('that role exists')
 			} else {
-				msg.channel.send('that role does not exist')
-				msg.channel.send("let's make it")
+				speak('that role does not exist')
+				speak("let's make it")
 
-				role = await msg.guild.roles.create({
+				role = await guild.roles.create({
 					data: {
 						name: msg.content,
 						color: 'BLUE',
@@ -61,13 +130,14 @@ client.on('message', async (msg: Message) => {
 			)
 
 			if (memberRole) {
-				msg.channel.send('user has it')
-				clearTimeout(t)
+				speak('user has it')
 			} else {
-				msg.member.roles.add(role)
-				msg.channel.send(`${msg.content} role added`)
-				clearTimeout(t)
+				await msg.member.roles.add(role)
+				speak(`${msg.content} role added`)
 			}
+
+			clearWaitingTimer(timeout)
+			botState.resetState()
 		}
 	}
 })
