@@ -1,6 +1,10 @@
 arrowParens: avoid
 bracketSpacing: true
 endOfLine: lf
+importOrder:
+  - ^[^\.](.*)
+  - ^(.*)
+importOrderSeparation: true
 printWidth: 80
 semi: false
 singleQuote: true

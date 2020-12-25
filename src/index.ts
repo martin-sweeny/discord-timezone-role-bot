@@ -1,55 +1,18 @@
 import { Client, Message, Role } from 'discord.js'
-
 import { config as configureEnvironment } from 'dotenv'
+
 import timezones from './data/timezones.json'
+import BotStateManager, { BotStates } from './utils/botState'
+import log from './utils/log'
+import TimerManager from './utils/timer'
 
 configureEnvironment()
-const client = new Client()
-
-enum BotStates {
-	Bored,
-	Waiting,
-}
-
-const log = (...message) => {
-	if (process.env.DEBUG) console.log(...message)
-}
-
-class BotStateManager {
-	public _state
-	private _defaultState = BotStates.Bored
-
-	constructor() {
-		this.state = this._defaultState
-	}
-
-	public get state() {
-		return this._state
-	}
-
-	public set state(newState: BotStates) {
-		log('Setting bot state to:\t', newState)
-		this._state = newState
-	}
-
-	public resetState() {
-		log('Clean state reset')
-		this.state = this._defaultState
-	}
-
-	public isDefaultState() {
-		return this._state === this._defaultState
-	}
-
-	public isWaiting() {
-		return this._state === BotStates.Waiting
-	}
-}
 
 type Timezone = typeof timezones[0]
 
-let botState = new BotStateManager()
-let timeout: NodeJS.Timeout
+const botState = new BotStateManager()
+const client = new Client()
+const timer = new TimerManager(10000)
 
 client.once('ready', () => {
 	log(`${timezones.length} timezones loaded`)
@@ -63,53 +26,31 @@ client.on('message', async (msg: Message) => {
 		await channel.send(message)
 	}
 
-	/**
-	 * Time out if the user took too long
-	 */
-	const tookTooLong = async () => {
-		speak('too long loser')
-		log('Time out state reset')
-		botState.state = BotStates.Bored
-	}
-
-	/**
-	 * Create the timer
-	 */
-	const setWaitingTimer = () => {
-		log('Setting timeout')
-		const t = client.setTimeout(tookTooLong, 10000)
-		log('Set timeout:\t\t' + t)
-		return t
-	}
-
-	/**
-	 * Clear the timer
-	 */
-	const clearWaitingTimer = (t: NodeJS.Timeout) => {
-		log('Clearing timeout:\t' + t)
-		client.clearTimeout(t)
-	}
-
 	// Bots send kind of "hidden" messages that we want to ignore
 	if (author.bot) return
 
 	log('Received message:\t' + msg.content)
 
+	timer.callback = () => {
+		speak('Too long loser')
+		botState.state = BotStates.Bored
+	}
+
 	if (botState.isDefaultState() && msg.content === 'sup t') {
 		speak('sup fam')
 		speak('what timezone are you in')
-		timeout = setWaitingTimer()
+		timer.start()
 		botState.state = BotStates.Waiting
 	}
 
-	const tz: Timezone = timezones.find(tz => tz.abbr === msg.content)
+	const tz: Timezone = timezones.find(zone => zone.abbr === msg.content)
 	if (botState.isWaiting()) {
 		let role: Role
 
 		if (tz) {
 			speak(msg.content + ' is based')
 
-			role = await guild.roles.cache.find(({ name }) => name === msg.content)
+			role = guild.roles.cache.find(({ name }) => name === msg.content)
 
 			if (role) {
 				speak('that role exists')
@@ -125,7 +66,7 @@ client.on('message', async (msg: Message) => {
 				})
 			}
 
-			const memberRole = await msg.member.roles.cache.find(
+			const memberRole = msg.member.roles.cache.find(
 				({ name }) => name === msg.content,
 			)
 
@@ -136,7 +77,7 @@ client.on('message', async (msg: Message) => {
 				speak(`${msg.content} role added`)
 			}
 
-			clearWaitingTimer(timeout)
+			timer.clear()
 			botState.resetState()
 		}
 	}
